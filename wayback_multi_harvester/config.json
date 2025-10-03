@@ -1,0 +1,25 @@
+{
+  "cdx_endpoint": "https://web.archive.org/cdx/search/cdx",
+  "cdx_params": {
+    "output": "json",
+    "fl": "urlkey,timestamp,original",
+    "collapse": "original",
+    "filter": "statuscode:200"
+  },
+  "sources": [
+    { "name": "sherdog_events",        "pattern": "www.sherdog.com/events/UFC-*",                 "notes": "Sherdog UFC event pages" },
+
+    { "name": "wikipedia_events",      "pattern": "en.wikipedia.org/wiki/UFC_*",                  "notes": "Wikipedia UFC event pages" },
+    { "name": "mmajunkie_tags",        "pattern": "mmajunkie.usatoday.com/tag/ufc-*",             "notes": "MMA Junkie tags (bonuses/articles)" },
+    { "name": "mmadecisions_events",   "pattern": "www.mmadecisions.com/event/*",                 "notes": "MMA Decisions event pages" },
+
+    { "name": "ufcstats_events",       "pattern": "www.ufcstats.com/event-details/*",             "notes": "UFCStats event pages" },
+
+    { "name": "tapology_events",       "pattern": "www.tapology.com/fightcenter/events/*-ufc-*",  "notes": "Tapology UFC events (Wayback often empty)" },
+
+    { "name": "espn_events_a",         "pattern": "www.espn.com/mma/fightcenter/_/eventId/*",     "notes": "ESPN event pages (variant A)" },
+    { "name": "espn_events_b",         "pattern": "www.espn.com/mma/fightcenter/_/id/*",          "notes": "ESPN event pages (variant B)" },
+    { "name": "espn_events_c",         "pattern": "www.espn.com/mma/fightcenter/*eventId*",       "notes": "ESPN event pages (variant C)" },
+    { "name": "espn_events_d",         "pattern": "espn.go.com/mma/fightcenter/*",                "notes": "Legacy ESPN domain (older captures)" }
+  ]
+}
