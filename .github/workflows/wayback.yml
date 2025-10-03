@@ -1,24 +1,33 @@
-name: Wayback Harvester
+name: Wayback Harvester (Chunked)
 
 on:
   workflow_dispatch:
     inputs:
       run_cdx:
-        description: "Run CDX index first? (true/false)"
-        required: false
-        default: "true"
+        description: "Build a fresh CDX index first? (true/false)"
+        default: "false"
       domain_filter:
-        description: "Only download this domain (e.g., sherdog.com). Leave blank for all."
-        required: false
+        description: "Optional: restrict to a domain (e.g., ufcstats.com). Leave blank for all."
         default: ""
+      offset:
+        description: "Row offset into master_source_index.csv (0-based, header not counted)"
+        default: "0"
+      chunk_size:
+        description: "How many rows to harvest this run"
+        default: "2000"
       max_downloads:
-        description: "Max snapshots to download (0 = no limit)"
-        required: false
-        default: "1000"
+        description: "Safety cap inside the chunk (0 = no extra cap)"
+        default: "0"
+
+concurrency:
+  group: wayback-harvester
+  cancel-in-progress: false
 
 jobs:
   wayback:
     runs-on: ubuntu-latest
+    timeout-minutes: 340
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,19 +42,56 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Build CDX index
+      - name: Build CDX index (optional)
         if: ${{ github.event.inputs.run_cdx == 'true' }}
         run: |
           mkdir -p data
           python scripts/cdx_index.py --out data/master_source_index.csv --log-level INFO
 
-      - name: Download snapshots
+      - name: Ensure index exists
         run: |
-          python scripts/wayback_harvester.py --cdx-csv data/master_source_index.csv --domain-filter "${{ github.event.inputs.domain_filter }}" --max "${{ github.event.inputs.max_downloads }}" --log-level INFO
+          test -f data/master_source_index.csv || { echo "ERROR: data/master_source_index.csv not found. Run once with run_cdx=true or commit the CSV."; exit 1; }
+
+      - name: Show index head (debug)
+        run: head -n 20 data/master_source_index.csv || true
+
+      - name: Slice index into chunk
+        run: |
+          OFFSET=${{ github.event.inputs.offset }}
+          SIZE=${{ github.event.inputs.chunk_size }}
+          mkdir -p data
+          # header
+          head -n 1 data/master_source_index.csv > data/chunk.csv
+          # rows [OFFSET .. OFFSET+SIZE-1]
+          tail -n +$((OFFSET + 2)) data/master_source_index.csv | head -n ${SIZE} >> data/chunk.csv
+          echo "Chunk rows: $(($(wc -l < data/chunk.csv)-1)) starting at offset ${OFFSET}"
+
+      - name: Download snapshots for chunk
+        run: |
+          python scripts/wayback_harvester.py \
+            --cdx-csv data/chunk.csv \
+            --domain-filter "${{ github.event.inputs.domain_filter }}" \
+            --max "${{ github.event.inputs.max_downloads }}" \
+            --log-level INFO
+
+      - name: Upload artifact (index CSV)
+        uses: actions/upload-artifact@v4
+        with:
+          name: master_source_index
+          path: data/master_source_index.csv
+          retention-days: 7
+
+      - name: Upload artifact (chunk CSV)
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdx_chunk_offset-${{ github.event.inputs.offset }}_size-${{ github.event.inputs.chunk_size }}${{ github.event.inputs.domain_filter && format('_{0}', github.event.inputs.domain_filter) || '' }}
+          path: data/chunk.csv
+          retention-days: 7
 
       - name: Upload artifact (snapshots)
         uses: actions/upload-artifact@v4
         with:
-          name: snapshots
+          name: snapshots_offset-${{ github.event.inputs.offset }}_size-${{ github.event.inputs.chunk_size }}${{ github.event.inputs.domain_filter && format('_{0}', github.event.inputs.domain_filter) || '' }}
           path: data/snapshots
           if-no-files-found: ignore
+          retention-days: 7
