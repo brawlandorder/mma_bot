@@ -1,0 +1,51 @@
+name: Wayback Harvester
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_cdx:
+        description: "Run CDX index first? (true/false)"
+        required: false
+        default: "true"
+      domain_filter:
+        description: "Only download this domain (e.g., sherdog.com). Leave blank for all."
+        required: false
+        default: ""
+      max_downloads:
+        description: "Max snapshots to download (0 = no limit)"
+        required: false
+        default: "1000"
+
+jobs:
+  wayback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Build CDX index
+        if: ${{ github.event.inputs.run_cdx == 'true' }}
+        run: |
+          mkdir -p data
+          python scripts/cdx_index.py --out data/master_source_index.csv --log-level INFO
+
+      - name: Download snapshots
+        run: |
+          python scripts/wayback_harvester.py --cdx-csv data/master_source_index.csv --domain-filter "${{ github.event.inputs.domain_filter }}" --max "${{ github.event.inputs.max_downloads }}" --log-level INFO
+
+      - name: Upload artifact (snapshots)
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshots
+          path: data/snapshots
+          if-no-files-found: ignore
